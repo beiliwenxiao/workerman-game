@@ -350,25 +350,19 @@ abstract class SocketWorker extends AbstractWorker
         // 出错了
         if('' == $buffer)
         {
-            if(feof($connection))
+            if(!feof($connection))
             {
-                // 客户端提前断开链接
-                $this->statusInfo['client_close']++;
-                // 如果该链接对应的buffer有数据，说明放生错误
-                if(!empty($this->recvBuffers[$fd]['buf']))
-                {
-                    $this->notice("CLIENT_CLOSE\nCLIENT_IP:".$this->getRemoteIp()."\nBUFFER:[".var_export($this->recvBuffers[$fd]['buf'],true)."]\n");
-                }
-            }
-            else
-            {
-                // 如果该链接对应的buffer有数据，说明放生错误
-                if(!empty($this->recvBuffers[$fd]['buf']))
-                {
-                    $this->notice("RECV_TIMEOUT\nCLIENT_IP:".$this->getRemoteIp()."\nBUFFER:[".var_export($this->recvBuffers[$fd]['buf'],true)."]\n");
-                }
+                return;
             }
             
+            // 客户端提前断开链接
+            $this->statusInfo['client_close']++;
+            // 如果该链接对应的buffer有数据，说明放生错误
+            if(!empty($this->recvBuffers[$fd]['buf']))
+            {
+                $this->notice("CLIENT_CLOSE\nCLIENT_IP:".$this->getRemoteIp()."\nBUFFER:[".var_export($this->recvBuffers[$fd]['buf'],true)."]\n");
+            }
+                
             // 关闭链接
             $this->closeClient($fd);
             if($this->workerStatus == self::STATUS_SHUTDOWN)
