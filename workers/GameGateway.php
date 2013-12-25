@@ -272,7 +272,7 @@ class GameGateway extends Man\Core\SocketWorker
     protected function fillFromUid(&$bin_data, $from_uid)
     {
         // from_uid在包头的12-15字节
-        $bin_data = substr_replace($bin_data, pack('I', $from_uid), 11, 4);
+        $bin_data = substr_replace($bin_data, pack('N', $from_uid), 11, 4);
     }
     
     protected function sendToWorker($bin_data)

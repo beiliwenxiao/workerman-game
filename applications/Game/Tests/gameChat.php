@@ -78,10 +78,10 @@ while(1)
  *     unsigned short    series_id,//序列号 udp协议使用
  *     unsigned short    cmd,//主命令字
  *     unsigned short    sub_cmd,//子命令字
- *     int                         code,//返回码
- *     unsigned int        from_uid,//来自用户uid
- *     unsigned int        to_uid,//发往的uid
- *     unsigned int       pack_len,//包长
+ *     unsigned int      code,//返回码
+ *     unsigned int      from_uid,//来自用户uid
+ *     unsigned int      to_uid,//发往的uid
+ *     unsigned int      pack_len,//包长
  *     char[pack_length-HEAD_LEN] body//包体
  * }
  *
@@ -167,7 +167,7 @@ class Buffer
             return self::HEAD_LEN - $len;
         }
 
-        $data = unpack("Cversion/Sseries_id/Scmd/Ssub_cmd/icode/Ifrom_uid/Ito_uid/Ipack_len", $buffer);
+        $data = unpack("Cversion/nseries_id/ncmd/nsub_cmd/Ncode/Nfrom_uid/Nto_uid/Npack_len", $buffer);
         if($data['pack_len'] > $len)
         {
             return $data['pack_len'] - $len;
@@ -200,7 +200,7 @@ class Buffer
     public function getBuffer()
     {
         $this->header['pack_len'] = self::HEAD_LEN + strlen($this->body);
-        return pack("CSSSiIII", $this->header['version'],  $this->header['series_id'], $this->header['cmd'], $this->header['sub_cmd'], $this->header['code'], $this->header['from_uid'], $this->header['to_uid'], $this->header['pack_len']).$this->body;
+        return pack("CnnnNNNN", $this->header['version'],  $this->header['series_id'], $this->header['cmd'], $this->header['sub_cmd'], $this->header['code'], $this->header['from_uid'], $this->header['to_uid'], $this->header['pack_len']).$this->body;
     }
 
     /**
@@ -210,7 +210,7 @@ class Buffer
      */
     public static function decode($buffer)
     {
-        $data = unpack("Cversion/Sseries_id/Scmd/Ssub_cmd/icode/Ifrom_uid/Ito_uid/Ipack_len", $buffer);
+        $data = unpack("Cversion/nseries_id/ncmd/nsub_cmd/Ncode/Nfrom_uid/Nto_uid/Npack_len", $buffer);
         $data['body'] = '';
         $body_len = $data['pack_len'] - self::HEAD_LEN;
         if($body_len > 0)
