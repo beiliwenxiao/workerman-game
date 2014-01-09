@@ -5,6 +5,11 @@ require_once WORKERMAN_ROOT_DIR . 'man/Core/Lib/Config.php';
 require_once WORKERMAN_ROOT_DIR . 'man/Core/Lib/Task.php';
 require_once WORKERMAN_ROOT_DIR . 'man/Core/Lib/Log.php';
 
+if(!defined('WORKERMAN_ROOT_DIR'))
+{
+    define('WORKERMAN_ROOT_DIR', realpath(__DIR__."/../../")."/");
+}
+
 /**
  * 
  * 主进程
@@ -308,7 +313,7 @@ class Master
                 self::$listenedSockets[$worker_name] = stream_socket_server($config['listen'], $error_no, $error_msg, $flags);
                 if(!self::$listenedSockets[$worker_name])
                 {
-                    Lib\Log::add("can not create socket {{$config['listen']} info:{$error_no} {$error_msg}\tServer start fail");
+                    Lib\Log::add("can not create socket {$config['listen']} info:{$error_no} {$error_msg}\tServer start fail");
                     exit("\n\033[31;40mcan not create socket {{$config['listen']} info:{$error_no} {$error_msg}\033[0m\n\n\033[31;40mServer start fail\033[0m\n\n");
                 }
             }
@@ -396,9 +401,21 @@ class Master
             // 尝试设置子进程进程名称
             self::setWorkerProcessTitle($worker_name);
     
-            // 创建worker实例
-            include_once WORKERMAN_ROOT_DIR . "workers/$worker_name.php";
-            $worker = new $worker_name();
+            // 查找worker文件
+            if($worker_file = \Man\Core\Lib\Config::get($worker_name.'.worker_file'))
+            {
+                include_once $worker_file;
+                $class_name = basename($worker_file, '.php');
+            }
+            else
+            {
+                $class_name = $worker_name;
+                include_once WORKERMAN_ROOT_DIR . "workers/$worker_name.php";
+            }
+            
+            // 创建实例
+            $worker = new $class_name($worker_name);
+            
             // 如果该worker有配置监听端口，则将监听端口的socket传递给子进程
             if(isset(self::$listenedSockets[$worker_name]))
             {
