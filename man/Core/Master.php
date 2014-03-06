@@ -4,6 +4,7 @@ require_once WORKERMAN_ROOT_DIR . 'man/Core/Lib/Checker.php';
 require_once WORKERMAN_ROOT_DIR . 'man/Core/Lib/Config.php';
 require_once WORKERMAN_ROOT_DIR . 'man/Core/Lib/Task.php';
 require_once WORKERMAN_ROOT_DIR . 'man/Core/Lib/Log.php';
+require_once WORKERMAN_ROOT_DIR . 'man/Core/Lib/Mutex.php';
 
 if(!defined('WORKERMAN_ROOT_DIR'))
 {

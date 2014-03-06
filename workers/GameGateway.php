@@ -9,28 +9,52 @@
  * 
  */
 require_once WORKERMAN_ROOT_DIR . 'man/Core/SocketWorker.php';
-require_once WORKERMAN_ROOT_DIR . 'applications/Game/Protocols/GameBuffer.php';
+require_once WORKERMAN_ROOT_DIR . 'applications/Game/Protocols/GatewayProtocol.php';
 require_once WORKERMAN_ROOT_DIR . 'applications/Game/Store.php';
 
 class GameGateway extends Man\Core\SocketWorker
 {
-    // 内部通信socket
+    /**
+     * 内部通信socket
+     * @var resouce
+     */
     protected $innerMainSocket = null;
-    // 内网ip
+    
+    /**
+     * 内网ip
+     * @var string
+     */
     protected $lanIp = '127.0.0.1';
-    // 内部通信端口
+    
+    
+    /**
+     * 内部通信端口
+     * @var int
+     */
     protected $lanPort = 0;
-    // uid到连接的映射
+    
+    /**
+     * uid到连接的映射
+     * @var array
+     */
     protected $uidConnMap = array();
-    // 连接到uid的映射
+    
+    /**
+     * 连接到uid的映射
+     * @var array
+     */
     protected $connUidMap = array();
     
-    // 到GameWorker的通信地址
+    
+    /**
+     * 到GameWorker的通信地址
+     * @var array
+     */ 
     protected $workerAddresses = array();
     
-    // 当前处理的包数据
-    protected $data = array();
-    
+    /**
+     * 进程启动
+     */
     public function start()
     {
         // 安装信号处理函数
@@ -83,17 +107,17 @@ class GameGateway extends Man\Core\SocketWorker
      */
     protected function registerAddress($address)
     {
+        \Man\Core\Lib\Mutex::get();
         $key = 'GLOBAL_GATEWAY_ADDRESS';
-        $addresses = Store::get($key);
-        if(empty($addresses))
+        $addresses_list = Store::get($key);
+        if(empty($addresses_list))
         {
-            $addresses = array($address);
+            $addresses_list = array();
         }
-        else
-        {
-            $addresses[] = $address;
-        }
-        Store::set($key, $addresses);
+        
+        $addresses_list[$address] = $address;
+        Store::set($key, $addresses_list);
+        \Man\Core\Lib\Mutex::release();
     }
     
     /**
@@ -129,49 +153,23 @@ class GameGateway extends Man\Core\SocketWorker
     
     public function dealInput($recv_str)
     {
-        return GameBuffer::input($recv_str, $this->data);
+        return 0;
     }
 
     public function innerDealProcess($recv_str)
     {
-        $data = GameBuffer::decode($recv_str);
-        if($data['cmd'] != GameBuffer::CMD_GATEWAY)
+        $pack = new GatewayProtocol($recv_str);
+        
+        switch($pack->header['cmd'])
         {
-            $this->notice('gateway inner pack err data:' .$recv_str . ' serialize:' . serialize($data) );
-            return;
-        }
-        switch($data['sub_cmd'])
-        {
-            case GameBuffer::SCMD_SEND_DATA:
-                return $this->sendToUid($data['to_uid'], $recv_str);
-               
-            case GameBuffer::SCMD_KICK_UID:
-                return $this->closeClientByUid($data['to_uid'] );
-                
-            case GameBuffer::SCMD_KICK_ADDRESS:
-                $fd = (int)trim($data['body']);
-                $uid = $this->getUidByFd($fd);
-                if($uid)
-                {
-                    return $this->closeClientByUid($uid);
-                }
-                return;
-            case GameBuffer::SCMD_BROADCAST:
-                return $this->broadCast($recv_str);
-            case GameBuffer::SCMD_CONNECT_SUCCESS:
-                $socket_id = $data['from_uid'];
-                $uid = $data['to_uid'];
-                // 查看是否已经绑定uid
-                $binded_uid = $this->getUidByFd($socket_id);
-                if($binded_uid)
-                {
-                    $this->notice('notify connection success fail ' . $socket_id . ' already binded data:'.serialize($data));
-                    return;
-                }
-                $this->uidConnMap[$uid] = $socket_id;
-                $this->connUidMap[$socket_id] = $uid;
-                $this->sendToUid($uid, $recv_str);
-                return;
+            case GatewayProtocol::CMD_SEND_TO_ONE:
+                return $this->sendToSocketId($pack->header['socket_id'], $pack->body);
+            case GatewayProtocol::CMD_KICK:
+                return $this->closeClientBySocketId($pack->header['socket_id']);
+            case GatewayProtocol::CMD_SEND_TO_ALL:
+                return $this->broadCast($pack->body);
+            case GatewayProtocol::CMD_CONNECT_SUCCESS:
+                return $this->connectSuccess($pack->header['socket_id'], $pack->header['uid']);
             default :
                 $this->notice('gateway inner pack sub_cmd err data:' .$recv_str . ' serialize:' . serialize($data) );
         }
@@ -181,7 +179,7 @@ class GameGateway extends Man\Core\SocketWorker
     {
         foreach($this->uidConnMap as $uid=>$conn)
         {
-            $this->sendToUid($uid, $bin_data);
+            $this->sendToSocketId($conn, $bin_data);
         }
     }
     
@@ -213,25 +211,29 @@ class GameGateway extends Man\Core\SocketWorker
         return 0;
     }
     
-    public function sendToUid($uid, $bin_data)
+    protected function connectSuccess($socket_id, $uid)
     {
-        if(!isset($this->uidConnMap[$uid]))
+        $binded_uid = $this->getUidByFd($socket_id);
+        if($binded_uid)
         {
-            return false;
+            $this->notice('notify connection success fail ' . $socket_id . ' already binded data:'.serialize($data));
+            return;
         }
-        $send_len = fwrite($this->connections[$this->uidConnMap[$uid]], $bin_data);
-        return $send_len == strlen($bin_data);
+        $this->uidConnMap[$uid] = $socket_id;
+        $this->connUidMap[$socket_id] = $uid;
+    }
+    
+    public function sendToSocketId($socket_id, $bin_data)
+    {
+        $this->currentDealFd = $socket_id;
+        return $this->sendToClient($bin_data);
     }
 
     protected function closeClient($fd)
     {
         if($uid = $this->getUidByFd($fd))
         {
-            $buf = new GameBuffer();
-            $buf->header['cmd'] = GameBuffer::CMD_SYSTEM;
-            $buf->header['sub_cmd'] = GameBuffer::SCMD_ON_CLOSE;
-            $buf->header['from_uid'] = $uid;
-            $this->sendToWorker($buf->getBuffer());
+            $this->sendToWorker(GatewayProtocol::CMD_ON_CLOSE, $fd);
             unset($this->uidConnMap[$uid], $this->connUidMap[$fd]);
         }
         parent::closeClient($fd);
@@ -241,41 +243,33 @@ class GameGateway extends Man\Core\SocketWorker
     {
         // 判断用户是否认证过
         $from_uid = $this->getUidByFd($this->currentDealFd);
+        // 触发ON_CONNECTION
         if(!$from_uid)
         {
-            // 没传sid
-            if(empty($this->data['body']))
-            {
-                $this->notice("onConnect miss sid ip:".$this->getRemoteIp(). " data[".serialize($this->data)."]");
-                $this->closeClient($this->currentDealFd);
-                return;
-            }
-            // 发送onconnet事件包,包体是sid
-            $on_buffer = new GameBuffer();
-            $on_buffer->header['cmd'] = GameBuffer::CMD_SYSTEM;
-            $on_buffer->header['sub_cmd'] = GameBuffer::SCMD_ON_CONNECT;
-            // 用from_uid来临时存储socketid
-            $on_buffer->header['from_uid'] = $this->currentDealFd;
-            // 用to_uid来临时存储通信端口号
-            $on_buffer->header['to_uid'] = $this->lanPort;
-            $on_buffer->body = $this->data['body'];
-            $this->sendToWorker($on_buffer->getBuffer());
-            return;
+            return $this->sendToWorker(GatewayProtocol::CMD_ON_CONNECTION, $this->currentDealFd, $recv_str);
         }
         
-        // 认证过
-        $this->fillFromUid($recv_str, $from_uid);
-        $this->sendToWorker($recv_str);
+        // 认证过, 触发ON_MESSAGE
+        $this->sendToWorker(GatewayProtocol::CMD_ON_MESSAGE, $this->currentDealFd, $recv_str);
     }
     
-    // 讲协议的from_uid填充为正确的值
-    protected function fillFromUid(&$bin_data, $from_uid)
+    protected function sendToWorker($cmd, $socket_id, $body = '')
     {
-        // from_uid在包头的12-15字节
-        $bin_data = substr_replace($bin_data, pack('N', $from_uid), 11, 4);
+        $address= $this->getRemoteAddress($socket_id);
+        list($client_ip, $client_port) = explode(':', $address, 2);
+        $pack = new GatewayProtocol();
+        $pack->header['cmd'] = $cmd;
+        $pack->header['local_ip'] = $this->lanIp;
+        $pack->header['local_port'] = $this->lanPort;
+        $pack->header['socket_id'] = $socket_id;
+        $pack->header['client_ip'] = $client_ip;
+        $pack->header['client_port'] = $client_ip;
+        $pack->header['uid'] = $this->getUidByFd($socket_id);
+        $pack->body = $body;
+        return $this->sendBufferToWorker($pack->getBuffer());
     }
     
-    protected function sendToWorker($bin_data)
+    protected function sendBufferToWorker($bin_data)
     {
         $client = stream_socket_client($this->workerAddresses[array_rand($this->workerAddresses)]);
         $len = stream_socket_sendto($client, $bin_data);

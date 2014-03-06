@@ -22,7 +22,7 @@ require_once WORKERMAN_ROOT_DIR . 'man/Core/Lib/Config.php';
 Man\Core\Lib\Config::instance();
 if(!($pid_file = Man\Core\Lib\Config::get('workerman.pid_file')))
 {
-    $pid_file = '/var/run/php-server.pid';
+    $pid_file = '/var/run/workerman.pid';
 }
 define('WORKERMAN_PID_FILE', $pid_file);
 
@@ -103,7 +103,7 @@ switch($cmd)
             exit("server not running?\n");
         }
         posix_kill($pid, SIGHUP);
-        echo "reload PHP-Server\n";
+        echo "reload Workerman\n";
         break;
     case 'kill':
         force_kill();
@@ -184,7 +184,7 @@ function stop_and_wait($wait_time = 6)
                 break;
             }
         }
-        echo "PHP-Server stoped\n";
+        echo "Workerman stoped\n";
     }
 }
 
