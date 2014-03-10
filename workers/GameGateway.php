@@ -165,13 +165,17 @@ class GameGateway extends Man\Core\SocketWorker
             case GatewayProtocol::CMD_SEND_TO_ONE:
                 return $this->sendToSocketId($pack->header['socket_id'], $pack->body);
             case GatewayProtocol::CMD_KICK:
+                if($pack->body)
+                {
+                    $this->sendToSocketId($pack->header['socket_id'], $pack->body);
+                }
                 return $this->closeClientBySocketId($pack->header['socket_id']);
             case GatewayProtocol::CMD_SEND_TO_ALL:
                 return $this->broadCast($pack->body);
             case GatewayProtocol::CMD_CONNECT_SUCCESS:
                 return $this->connectSuccess($pack->header['socket_id'], $pack->header['uid']);
             default :
-                $this->notice('gateway inner pack sub_cmd err data:' .$recv_str . ' serialize:' . serialize($data) );
+                $this->notice('gateway inner pack cmd err data:' .$recv_str );
         }
     }
     
@@ -183,14 +187,13 @@ class GameGateway extends Man\Core\SocketWorker
         }
     }
     
-    public function closeClientByUid($uid)
+    protected function closeClientBySocketId($socket_id)
     {
-        $fd = $this->getFdByUid($uid);
-        if($fd)
+        if($uid = $this->getUidByFd($socket_id))
         {
-            unset($this->uidConnMap[$uid], $this->connUidMap[$fd]);
-            parent::closeClient($fd);
+            unset($this->uidConnMap[$uid], $this->connUidMap[$socket_id]);
         }
+        parent::closeClient($socket_id);
     }
     
     protected function getFdByUid($uid)
@@ -257,6 +260,7 @@ class GameGateway extends Man\Core\SocketWorker
     {
         $address= $this->getRemoteAddress($socket_id);
         list($client_ip, $client_port) = explode(':', $address, 2);
+        if(empty($client_port)) $this->notice(new Exception('$address empty :' . var_export($address,true)) . ' $this->connections:'.var_export($this->connections, true).' this->protocol:'.$this->protocol);
         $pack = new GatewayProtocol();
         $pack->header['cmd'] = $cmd;
         $pack->header['local_ip'] = $this->lanIp;

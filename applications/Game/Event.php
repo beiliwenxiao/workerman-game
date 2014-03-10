@@ -7,7 +7,6 @@
  */
 
 require_once WORKERMAN_ROOT_DIR . 'applications/Game/Gateway.php';
-require_once WORKERMAN_ROOT_DIR . 'applications/Game/Protocols/WebSocket.php';
 
 class Event
 {
