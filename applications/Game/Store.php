@@ -15,7 +15,7 @@ class Store
         if(!self::$instance)
         {
             self::$instance = new Memcache;
-            self::$instance->addServer('127.0.0.1', 11211);
+            self::$instance->addServer('192.168.25.9', 6660);
         }
         return self::$instance;
     }
